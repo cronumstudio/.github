@@ -91,8 +91,20 @@ jobs:
           fi
           echo "/app is read-only for the app ($ids)."
 
+      # The safe values must start, or a refusal below would prove nothing.
       - name: The entrypoint refuses unsafe settings
         run: |
+          starts() {
+            if ! docker run --rm "$@" "$IMAGE" true; then
+              echo "Did not start with ${*:-the defaults}."
+              exit 1
+            fi
+            echo "Starts: ${*:-the defaults}"
+          }
+          starts
+          starts -e PUID= -e PGID=
+          starts -e PUID=1026 -e PGID=100
+          starts -e DATA_DIR=/data/sub
           refuses() {
             if docker run --rm "$@" "$IMAGE" true >/dev/null 2>&1; then
               echo "Started with $*, and it should have refused."
