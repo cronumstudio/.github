@@ -80,13 +80,16 @@ jobs:
             console.log("Every file in /data is private to the app.");
           '
 
+      # `docker exec` enters as root by default, so it takes the app's own
+      # uid and gid from PID 1.
       - name: The application code is read-only
         run: |
-          if docker exec app sh -c 'touch /app/package.json /app/.write-test' 2>/dev/null; then
+          ids="$(docker exec app awk '/^Uid:/ { u = $2 } /^Gid:/ { g = $2 } END { print u ":" g }' /proc/1/status)"
+          if docker exec -u "$ids" app sh -c 'touch /app/package.json /app/.write-test' 2>/dev/null; then
             echo "The app can write over its own code in /app."
             exit 1
           fi
-          echo "/app is read-only for the app."
+          echo "/app is read-only for the app ($ids)."
 
       - name: The entrypoint refuses unsafe settings
         run: |
