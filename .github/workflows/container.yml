@@ -1,0 +1,123 @@
+# Reusable container checks: builds the calling repository's image, starts it
+# on an empty volume and checks the suite's container conventions:
+#
+# - it answers /health from inside, the same way its HEALTHCHECK does;
+# - the app runs as an unprivileged user, never as root;
+# - the umask is 077 and every file it wrote in /data is private to it;
+# - the application code in /app is read-only for it;
+# - the entrypoint refuses a DATA_DIR outside /data and a PUID or PGID of 0.
+#
+# The image is built for the runner's architecture only and never pushed.
+#
+# Usage, from the calling repository:
+#
+#   jobs:
+#     container:
+#       uses: cronumstudio/.github/.github/workflows/container.yml@main
+name: Container checks
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: app:ci
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Build the image
+        run: docker build -t "$IMAGE" .
+
+      - name: Start it on an empty volume
+        run: docker run -d --name app -v app-data:/data "$IMAGE"
+
+      - name: Wait for /health
+        run: |
+          for _ in $(seq 1 30); do
+            if docker exec app sh -c 'wget -qO- "http://127.0.0.1:${PORT}/health"' >/dev/null 2>&1; then
+              echo "The container answers /health."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "No answer from /health after 60 s."
+          docker logs app
+          exit 1
+
+      - name: The app does not run as root
+        run: |
+          uid="$(docker exec app awk '/^Uid:/ { print $2 }' /proc/1/status)"
+          echo "PID 1 runs with uid $uid."
+          [ "$uid" != "0" ]
+
+      - name: Files in /data are private to the app
+        run: |
+          umask="$(docker exec app awk '/^Umask:/ { print $2 }' /proc/1/status)"
+          echo "umask of PID 1: $umask"
+          [ "$umask" = "0077" ]
+          docker exec app node -e '
+            const fs = require("node:fs"), path = require("node:path");
+            const open = [];
+            const walk = (dir) => {
+              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (fs.statSync(full).mode & 0o077) open.push(full);
+              }
+            };
+            walk("/data");
+            if (open.length) {
+              console.log("Readable by others:", open.join(", "));
+              process.exit(1);
+            }
+            console.log("Every file in /data is private to the app.");
+          '
+
+      # `docker exec` enters as root by default, so it takes the app's own
+      # uid and gid from PID 1.
+      - name: The application code is read-only
+        run: |
+          ids="$(docker exec app awk '/^Uid:/ { u = $2 } /^Gid:/ { g = $2 } END { print u ":" g }' /proc/1/status)"
+          if docker exec -u "$ids" app sh -c 'touch /app/package.json /app/.write-test' 2>/dev/null; then
+            echo "The app can write over its own code in /app."
+            exit 1
+          fi
+          echo "/app is read-only for the app ($ids)."
+
+      # The safe values must start, or a refusal below would prove nothing.
+      - name: The entrypoint refuses unsafe settings
+        run: |
+          starts() {
+            if ! docker run --rm "$@" "$IMAGE" true; then
+              echo "Did not start with ${*:-the defaults}."
+              exit 1
+            fi
+            echo "Starts: ${*:-the defaults}"
+          }
+          starts
+          starts -e PUID= -e PGID=
+          starts -e PUID=1026 -e PGID=100
+          starts -e DATA_DIR=/data/sub
+          refuses() {
+            if docker run --rm "$@" "$IMAGE" true >/dev/null 2>&1; then
+              echo "Started with $*, and it should have refused."
+              exit 1
+            fi
+            echo "Refused: $*"
+          }
+          refuses -e DATA_DIR=/app
+          refuses -e DATA_DIR=/data/../app
+          refuses -e PUID=0
+          refuses -e PUID=1000 -e PGID=0
+          refuses -e PUID=node
+
+      - name: Logs
+        if: always()
+        run: docker logs app 2>&1 | tail -n 50 || true
