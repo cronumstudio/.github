@@ -5,9 +5,12 @@
 # - the app runs as an unprivileged user, never as root;
 # - the umask is 077 and every file it wrote in /data is private to it;
 # - the application code in /app is read-only for it;
-# - the entrypoint refuses a DATA_DIR outside /data and a PUID or PGID of 0.
+# - the entrypoint refuses a DATA_DIR outside /data and a PUID or PGID of 0;
+# - the app refuses to start without BASE_URL (the images run in production)
+#   or with an old variable name, and says which variable is wrong.
 #
-# The image is built for the runner's architecture only and never pushed.
+# The image is built for the runner's architecture only and never pushed. It
+# runs with BASE_URL=http://localhost, which production requires.
 #
 # Usage, from the calling repository:
 #
@@ -27,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE: app:ci
+      BASE_URL: http://localhost
     steps:
       - uses: actions/checkout@v7
         with:
@@ -36,7 +40,7 @@ jobs:
         run: docker build -t "$IMAGE" .
 
       - name: Start it on an empty volume
-        run: docker run -d --name app -v app-data:/data "$IMAGE"
+        run: docker run -d --name app -e BASE_URL -v app-data:/data "$IMAGE"
 
       - name: Wait for /health
         run: |
@@ -117,6 +121,31 @@ jobs:
           refuses -e PUID=0
           refuses -e PUID=1000 -e PGID=0
           refuses -e PUID=node
+
+      # The app itself this time, not `true`: it must stop at once and name the
+      # variable, instead of running on a guess or on an old name.
+      - name: The app refuses a missing BASE_URL or an old variable name
+        run: |
+          stops() {
+            variable="$1"; shift
+            docker run -d --name probe "$@" "$IMAGE" >/dev/null
+            if ! code="$(timeout 30 docker wait probe)"; then
+              docker rm -f probe >/dev/null
+              echo "Still running after 30 s with ${*:-no BASE_URL}, and it should have stopped."
+              exit 1
+            fi
+            log="$(docker logs probe 2>&1)"
+            docker rm -f probe >/dev/null
+            if [ "$code" = "0" ] || ! printf '%s' "$log" | grep -q "$variable"; then
+              echo "With ${*:-no BASE_URL}: exit $code, and the log doesn't name $variable:"
+              printf '%s\n' "$log" | tail -n 20
+              exit 1
+            fi
+            echo "Stops and names $variable: ${*:-no BASE_URL}"
+          }
+          stops BASE_URL
+          stops PUBLIC_URL -e BASE_URL -e PUBLIC_URL=http://localhost
+          stops HOST_PORT -e BASE_URL -e PORT_HOST=3000
 
       - name: Logs
         if: always()
