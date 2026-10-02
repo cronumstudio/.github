@@ -3,7 +3,8 @@
 # Runs `npm test` with the submodules checked out (server/suite is
 # suite-core) and, when the repository defines an `i18n` script, the catalog
 # parity check too: keys, placeholders and plural forms in every language.
-# There is nothing to install: no dependencies, and SQLite comes inside Node.
+# Most apps have nothing to install (no dependencies, and SQLite comes inside
+# Node); a repository with a package-lock.json gets `npm ci` first.
 #
 # Usage, from the calling repository:
 #
@@ -33,6 +34,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ inputs.node-version }}
+
+      # Most apps have no dependencies; one with a lockfile gets exactly those.
+      - name: Install dependencies
+        if: hashFiles('package-lock.json') != ''
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       # The tests start their own servers on temporary databases.
       - run: npm test
