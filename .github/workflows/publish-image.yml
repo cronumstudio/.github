@@ -1,0 +1,90 @@
+# Reusable image publication: builds the calling repository's Dockerfile and
+# pushes it to ghcr.io/<owner>/<repo>.
+#
+# On a `v*` tag it first checks that the tag and package.json agree, so an
+# image can't announce a version that isn't its own, and tags the image with
+# the full version, major.minor and major. On the default branch it also moves
+# `latest`.
+#
+# Real multi-arch by default: amd64 for Intel NAS units and servers, arm64 for
+# Raspberry Pi and ARM NAS units. It is cheap because nothing is compiled (zero
+# npm dependencies and SQLite comes inside Node), so buildx only copies files.
+#
+# The caller runs the tests first and grants `packages: write`:
+#
+#   on:
+#     push:
+#       tags: ['v*']
+#     workflow_dispatch:
+#   permissions:
+#     contents: read
+#     packages: write
+#   jobs:
+#     test:
+#       uses: cronumstudio/.github/.github/workflows/test.yml@main
+#     publish:
+#       needs: test
+#       uses: cronumstudio/.github/.github/workflows/publish-image.yml@main
+name: Publish image
+
+on:
+  workflow_call:
+    inputs:
+      platforms:
+        description: Platforms to build for.
+        type: string
+        default: linux/amd64,linux/arm64
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      # The smoke tests already check that the app's version module and
+      # package.json agree; this ties the third end, the git tag.
+      - name: Check that the tag and package.json agree
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          inPackage="$(node -p "require('./package.json').version")"
+          inTag="${GITHUB_REF_NAME#v}"
+          if [ "$inPackage" != "$inTag" ]; then
+            echo "The tag is $inTag and package.json says $inPackage."
+            echo "That would publish an image announcing a version it isn't."
+            exit 1
+          fi
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ inputs.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

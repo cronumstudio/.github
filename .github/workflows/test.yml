@@ -1,0 +1,50 @@
+# Reusable test job for the suite's apps and suite-core.
+#
+# Runs `npm test` with the submodules checked out (server/suite is
+# suite-core) and, when the repository defines an `i18n` script, the catalog
+# parity check too: keys, placeholders and plural forms in every language.
+# There is nothing to install: no dependencies, and SQLite comes inside Node.
+#
+# Usage, from the calling repository:
+#
+#   jobs:
+#     test:
+#       uses: cronumstudio/.github/.github/workflows/test.yml@main
+name: Test
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version to test with.
+        type: string
+        default: '24'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      # The tests start their own servers on temporary databases.
+      - run: npm test
+
+      - name: Look for an i18n script
+        id: i18n
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.i18n ? 0 : 1)"; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No i18n script in package.json: catalog parity skipped."
+          fi
+      - name: Check catalog parity
+        if: steps.i18n.outputs.present == 'true'
+        run: npm run i18n
