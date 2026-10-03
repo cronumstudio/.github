@@ -7,10 +7,13 @@
 # - the application code in /app is read-only for it;
 # - the entrypoint refuses a DATA_DIR outside /data and a PUID or PGID of 0;
 # - the app refuses to start without BASE_URL (the images run in production)
-#   or with an old variable name, and says which variable is wrong.
+#   or with an old variable name, and says which variable is wrong;
+# - it passes suite-core's conformance checks (tools/conformance.js, from
+#   suite-core 0.29), signed in as a throwaway administrator.
 #
 # The image is built for the runner's architecture only and never pushed. It
-# runs with BASE_URL=http://localhost, which production requires.
+# runs with BASE_URL at its own port, which production requires, and an
+# administrator whose random password exists only during the job.
 #
 # Usage, from the calling repository:
 #
@@ -30,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE: app:ci
-      BASE_URL: http://localhost
+      ADMIN_USER: conformance
     steps:
       - uses: actions/checkout@v7
         with:
@@ -39,8 +42,16 @@ jobs:
       - name: Build the image
         run: docker build -t "$IMAGE" .
 
+      - name: Its port, its address and a throwaway administrator
+        run: |
+          port="$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$IMAGE" | sed -n 's/^PORT=//p')"
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          echo "BASE_URL=http://127.0.0.1:${port:-3000}" >> "$GITHUB_ENV"
+          echo "ADMIN_PASSWORD=$password" >> "$GITHUB_ENV"
+
       - name: Start it on an empty volume
-        run: docker run -d --name app -e BASE_URL -v app-data:/data "$IMAGE"
+        run: docker run -d --name app -e BASE_URL -e ADMIN_USER -e ADMIN_PASSWORD -v app-data:/data "$IMAGE"
 
       - name: Wait for /health
         run: |
@@ -54,6 +65,16 @@ jobs:
           echo "No answer from /health after 60 s."
           docker logs app
           exit 1
+
+      # From inside the container, where BASE_URL (its own port) answers.
+      - name: Conformance with the suite
+        run: |
+          if ! docker exec app test -f server/suite/tools/conformance.js; then
+            echo "This app's suite-core has no conformance checks yet (they come with 0.29)."
+            exit 0
+          fi
+          docker exec -e CONFORMANCE_USER="$ADMIN_USER" -e CONFORMANCE_PASSWORD="$ADMIN_PASSWORD" app \
+            node server/suite/tools/conformance.js "$BASE_URL"
 
       - name: The app does not run as root
         run: |
