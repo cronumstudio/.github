@@ -26,11 +26,23 @@ The server runs production, so the runner is kept apart from it:
 
 ## Turning it on and off
 
-The reusable workflows pick the runner with the organisation variable
-`CI_RUNNER` (Settings → Secrets and variables → Actions → Variables):
+The reusable workflows pick the runner with the variable `CI_RUNNER`, set on
+each private repository (Settings → Secrets and variables → Actions →
+Variables). On GitHub Free an organisation variable doesn't reach private
+repositories, so it has to be the repository's own:
 
-- `CI_RUNNER` = `hetzner`: private repositories run here.
-- Variable removed: everything goes back to GitHub's `ubuntu-latest`.
+```bash
+gh variable set CI_RUNNER -R cronumstudio/<repo> --body hetzner   # here
+gh variable delete CI_RUNNER -R cronumstudio/<repo>               # GitHub's machines
+```
+
+It is set on next, notes, projects, tasks, tracker and work. Only the jobs
+that come from these shared workflows move: a repository's own jobs with
+`runs-on: ubuntu-latest` stay on GitHub until they use the same expression,
+and tracker's `macos-15` job can't run here at all.
+
+The runner takes jobs even while the plan's included minutes are used up:
+they don't count against them.
 
 ## Installing it again
 
