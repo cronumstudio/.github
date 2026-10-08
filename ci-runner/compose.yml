@@ -1,0 +1,64 @@
+# Self-hosted GitHub Actions runner for the cronumstudio organisation.
+#
+# The runner never touches the server's own Docker: jobs talk to a private
+# Docker daemon (dind) with its own containers, volumes and images, so CI
+# can't see or remove anything in production. Both containers have CPU and
+# memory caps and a low CPU weight: under load, production goes first and a
+# runaway build is what gets killed.
+name: gh-runner
+
+services:
+  runner:
+    build: .
+    image: gh-runner:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RUNNER_URL: https://github.com/cronumstudio
+      RUNNER_NAME: hetzner-ci
+      RUNNER_LABELS: hetzner
+      DOCKER_HOST: tcp://docker:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+      ACTIONS_RUNNER_HOOK_JOB_STARTED: /usr/local/bin/job-started.sh
+    volumes:
+      - state:/state
+      - work:/home/runner/_work
+      - certs:/certs/client:ro
+    depends_on: [dind]
+    cpus: 1.0
+    cpu_shares: 256
+    mem_limit: 768m
+    memswap_limit: 1g
+    logging: &logging
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+
+  dind:
+    image: docker:dind
+    restart: unless-stopped
+    privileged: true
+    environment:
+      # TLS on 2376, reachable only on this compose network: no port is
+      # published. dind writes the client certificates the runner reads.
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - dind:/var/lib/docker
+      - certs:/certs/client
+      # Same path as in the runner, so bind mounts of the workspace resolve.
+      - work:/home/runner/_work
+    networks:
+      default:
+        # dind's own certificate is issued for the name `docker`.
+        aliases: [docker]
+    cpus: 1.5
+    cpu_shares: 256
+    mem_limit: 1280m
+    memswap_limit: 1536m
+    logging: *logging
+
+volumes:
+  state:
+  work:
+  dind:
+  certs:
