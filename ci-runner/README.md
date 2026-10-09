@@ -1,23 +1,30 @@
-# The organisation's own runner
+# The organisation's own runners
 
-A self-hosted GitHub Actions runner for cronumstudio's private repositories, on
-the production server (`cronum-prod`, Hetzner) in `/opt/gh-runner`. Runners of
-our own don't spend the plan's Actions minutes.
+Two self-hosted GitHub Actions runners, `hetzner-ci` and `hetzner-ci-2`, for
+cronumstudio's private repositories, on the production server (`cronum-prod`,
+Hetzner) in `/opt/gh-runner`. Runners of our own don't spend the plan's Actions
+minutes.
+
+Both carry the label `hetzner`: GitHub hands each queued job to whichever is
+free, so a pull request's jobs run two at a time, and a job waits only when
+both are busy. Nothing is assigned by hand.
 
 ## How it is isolated
 
-The server runs production, so the runner is kept apart from it:
+The server runs production, so the runners are kept apart from it:
 
-- **Its own Docker.** Jobs talk to a Docker daemon of their own (`dind`), not
-  the server's. They can't see, stop or remove the apps' containers, volumes or
-  images, and the fixed names our workflows use (`app`, `app-data`) can't clash
-  with anything real. The daemon answers over TLS on the compose network only:
-  no port is published.
-- **Caps.** The runner has 1 CPU and 768 MB, its Docker 1.5 CPU and 1.28 GB,
-  both with a quarter of the normal CPU weight. Under load production goes
-  first, and a runaway build is what gets killed.
-- **A clean start for every job.** `job-started.sh` removes the containers,
-  volumes and networks left by earlier jobs, and images and build cache older
+- **Its own Docker.** Each runner's jobs talk to a Docker daemon of their own
+  (`dind`, `dind-2`), not the server's. They can't see, stop or remove the
+  apps' containers, volumes or images, and the fixed names our workflows use
+  (`app`, `app-data`) can't clash with anything real or with the other
+  runner's job. Each pair has its own network, where its daemon answers over
+  TLS as `docker`: no port is published.
+- **Caps.** Each runner has 1 CPU and 640 MB, each Docker 1.5 CPU and 1 GB,
+  all with a quarter of the normal CPU weight. Under load production goes
+  first, and a runaway build is what gets killed. Measured with both busy: a
+  pair peaks at about 500 MB, and the server kept over 1.5 GB free.
+- **A clean start for every job.** `job-started.sh` removes, in the runner's
+  own Docker, the containers, volumes and networks left by earlier jobs, and images and build cache older
   than three days, as on a fresh GitHub machine.
 - **Private repositories only.** The organisation's default runner group
   doesn't take public repositories, and the workflows only send private ones
@@ -44,24 +51,25 @@ and tracker's `macos-15` job can't run here at all.
 The runner takes jobs even while the plan's included minutes are used up:
 they don't count against them.
 
-## Installing it again
+## Installing them again
 
 On the server, with these files in `/opt/gh-runner`:
 
 ```bash
 cd /opt/gh-runner
-# a registration token, valid for an hour, from an organisation owner:
+# a registration token, valid for an hour, from an organisation owner
+# (one token registers both runners):
 #   gh api -X POST orgs/cronumstudio/actions/runners/registration-token --jq .token
 echo "RUNNER_TOKEN=<token>" > .env && chmod 600 .env
 docker compose up -d --build
-docker compose logs -f runner     # "Listening for Jobs"
+docker compose logs -f runner runner-2   # "Listening for Jobs"
 : > .env                          # the token is no longer needed
 ```
 
-The runner keeps its credentials in the `state` volume, so rebuilding or
-updating the containers doesn't need a new token. It updates itself when GitHub
+Each runner keeps its credentials in its `state` volume, so rebuilding or
+updating the containers doesn't need a new token. They update themselves when GitHub
 publishes a new version; `docker compose pull && docker compose up -d --build`
 brings the images up to date.
 
-To remove it: `docker compose down -v` on the server, and delete `hetzner-ci`
-under Settings → Actions → Runners.
+To remove them: `docker compose down -v` on the server, and delete
+`hetzner-ci` and `hetzner-ci-2` under Settings → Actions → Runners.
