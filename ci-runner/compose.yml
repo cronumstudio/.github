@@ -1,64 +1,107 @@
-# Self-hosted GitHub Actions runner for the cronumstudio organisation.
+# Self-hosted GitHub Actions runners for the cronumstudio organisation: two
+# of them, so a pull request's jobs run in parallel. Both carry the label
+# `hetzner` and GitHub hands each queued job to whichever is free.
 #
-# The runner never touches the server's own Docker: jobs talk to a private
-# Docker daemon (dind) with its own containers, volumes and images, so CI
-# can't see or remove anything in production. Both containers have CPU and
-# memory caps and a low CPU weight: under load, production goes first and a
-# runaway build is what gets killed.
+# A runner never touches the server's own Docker: its jobs talk to a private
+# Docker daemon (dind) of its own, with its own containers, volumes and
+# images, so CI can't see or remove anything in production, and two jobs
+# using the same fixed names (`app`, `app-data`) can't clash. Each pair has
+# its own network, where its daemon answers as `docker`. All containers have
+# CPU and memory caps and a low CPU weight: under load, production goes first
+# and a runaway build is what gets killed.
 name: gh-runner
+
+x-runner: &runner
+  build: .
+  image: gh-runner:local
+  restart: unless-stopped
+  env_file: .env
+  environment: &runner-env
+    RUNNER_URL: https://github.com/cronumstudio
+    RUNNER_LABELS: hetzner
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: /certs/client
+    ACTIONS_RUNNER_HOOK_JOB_STARTED: /usr/local/bin/job-started.sh
+  cpus: 1.0
+  cpu_shares: 256
+  mem_limit: 640m
+  memswap_limit: 768m
+  logging: &logging
+    driver: json-file
+    options: { max-size: 10m, max-file: "3" }
+
+x-dind: &dind
+  image: docker:dind
+  restart: unless-stopped
+  privileged: true
+  environment:
+    # TLS on 2376, reachable only on the pair's network: no port is
+    # published. dind writes the client certificates its runner reads.
+    DOCKER_TLS_CERTDIR: /certs
+  cpus: 1.5
+  cpu_shares: 256
+  mem_limit: 1g
+  memswap_limit: 1280m
+  logging: *logging
 
 services:
   runner:
-    build: .
-    image: gh-runner:local
-    restart: unless-stopped
-    env_file: .env
+    <<: *runner
     environment:
-      RUNNER_URL: https://github.com/cronumstudio
+      <<: *runner-env
       RUNNER_NAME: hetzner-ci
-      RUNNER_LABELS: hetzner
-      DOCKER_HOST: tcp://docker:2376
-      DOCKER_TLS_VERIFY: "1"
-      DOCKER_CERT_PATH: /certs/client
-      ACTIONS_RUNNER_HOOK_JOB_STARTED: /usr/local/bin/job-started.sh
     volumes:
       - state:/state
       - work:/home/runner/_work
       - certs:/certs/client:ro
+    networks: [ci-1]
     depends_on: [dind]
-    cpus: 1.0
-    cpu_shares: 256
-    mem_limit: 768m
-    memswap_limit: 1g
-    logging: &logging
-      driver: json-file
-      options: { max-size: 10m, max-file: "3" }
 
   dind:
-    image: docker:dind
-    restart: unless-stopped
-    privileged: true
-    environment:
-      # TLS on 2376, reachable only on this compose network: no port is
-      # published. dind writes the client certificates the runner reads.
-      DOCKER_TLS_CERTDIR: /certs
+    <<: *dind
     volumes:
       - dind:/var/lib/docker
-      - certs:/certs/client
       # Same path as in the runner, so bind mounts of the workspace resolve.
       - work:/home/runner/_work
+      - certs:/certs/client
     networks:
-      default:
+      ci-1:
         # dind's own certificate is issued for the name `docker`.
         aliases: [docker]
-    cpus: 1.5
-    cpu_shares: 256
-    mem_limit: 1280m
-    memswap_limit: 1536m
-    logging: *logging
+
+  runner-2:
+    <<: *runner
+    environment:
+      <<: *runner-env
+      RUNNER_NAME: hetzner-ci-2
+    volumes:
+      - state-2:/state
+      - work-2:/home/runner/_work
+      - certs-2:/certs/client:ro
+    networks: [ci-2]
+    depends_on: [dind-2]
+
+  dind-2:
+    <<: *dind
+    volumes:
+      - dind-2:/var/lib/docker
+      - work-2:/home/runner/_work
+      - certs-2:/certs/client
+    networks:
+      ci-2:
+        aliases: [docker]
+
+networks:
+  ci-1:
+  ci-2:
 
 volumes:
   state:
   work:
   dind:
   certs:
+  state-2:
+  work-2:
+  dind-2:
+  certs-2:
