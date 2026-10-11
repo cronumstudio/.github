@@ -9,7 +9,9 @@
 # - the app refuses to start without BASE_URL (the images run in production)
 #   or with an old variable name, and says which variable is wrong;
 # - it passes suite-core's conformance checks (tools/conformance.js, from
-#   suite-core 0.29), signed in as a throwaway administrator.
+#   suite-core 0.29), signed in as a throwaway administrator. An app that
+#   serves no /mcp sets the `mcp` input to false: the run gets `--no-mcp`,
+#   which skips only the MCP check; every other check still runs.
 #
 # The image is built for the runner's architecture only and never pushed. It
 # runs with BASE_URL at its own port, which production requires, and an
@@ -20,10 +22,20 @@
 #   jobs:
 #     container:
 #       uses: cronumstudio/.github/.github/workflows/container.yml@main
+#
+# An app without an MCP endpoint adds:
+#
+#       with:
+#         mcp: false
 name: Container checks
 
 on:
   workflow_call:
+    inputs:
+      mcp:
+        description: The app serves /mcp. False skips the conformance run's MCP check (--no-mcp).
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -70,6 +82,7 @@ jobs:
           exit 1
 
       # From inside the container, where BASE_URL (its own port) answers.
+      # With `mcp: false` it skips the MCP check; every other check still runs.
       - name: Conformance with the suite
         run: |
           if ! docker exec app test -f server/suite/tools/conformance.js; then
@@ -77,7 +90,7 @@ jobs:
             exit 0
           fi
           docker exec -e CONFORMANCE_USER="$ADMIN_USER" -e CONFORMANCE_PASSWORD="$ADMIN_PASSWORD" app \
-            node server/suite/tools/conformance.js "$BASE_URL"
+            node server/suite/tools/conformance.js "$BASE_URL" ${{ inputs.mcp == false && '--no-mcp' || '' }}
 
       - name: The app does not run as root
         run: |
