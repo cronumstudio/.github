@@ -45,5 +45,5 @@ jobs:
           path-to-document: https://github.com/cronumstudio/.github/blob/main/CLA.md
           path-to-signatures: signatures/cla.json
           branch: cla-signatures
-          allowlist: martinandersen84,dependabot[bot],github-actions[bot],claude[bot]
+          allowlist: martinandersen84,dependabot[bot],github-actions[bot],claude[bot],cronum-studio[bot]
           lock-pullrequest-aftermerge: false
