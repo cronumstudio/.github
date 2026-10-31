@@ -4,21 +4,25 @@
 # `cla-signatures`, which must exist; nothing outside GitHub is involved. Cronum Studio's own
 # accounts and bots don't sign.
 #
-# Usage, from the calling repository (.github/workflows/cla.yml):
+# Only public repositories call it: in a private one only collaborators open pull requests, and
+# they are all on the allowlist. Usage, from the calling repository (.github/workflows/cla.yml),
+# pinned to a commit of this repository, never to a branch (the token below can write to the
+# calling repository, so what runs with it must not change under it):
 #
 #   on:
 #     pull_request_target:
-#       types: [opened, synchronize, reopened, closed]
+#       types: [opened, synchronize, reopened]
 #     issue_comment:
 #       types: [created]
-#   permissions:
-#     contents: write        # writes the signatures
-#     pull-requests: write   # comments on the pull request
-#     actions: write         # runs the check again after a signature
-#     statuses: write
+#   permissions: {}
 #   jobs:
 #     cla:
-#       uses: cronumstudio/.github/.github/workflows/cla.yml@main
+#       permissions:
+#         contents: write        # writes the signatures
+#         pull-requests: write   # comments on the pull request
+#         actions: write         # runs the check again after a signature
+#         statuses: write
+#       uses: cronumstudio/.github/.github/workflows/cla.yml@<commit sha>  # main of <date>
 #
 # pull_request_target runs with the base repository's token and never checks out the pull
 # request's code, so a fork can't use it to run anything.
@@ -30,15 +34,17 @@ on:
 jobs:
   cla:
     if: >-
-      github.event_name == 'pull_request_target' ||
-      (github.event.issue.pull_request && (
-        github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA' ||
-        github.event.comment.body == 'recheck'))
-    # Private repositories run on the organisation's own runner when the CI_RUNNER variable
-    # names its label (see ci-runner/); public ones on GitHub's machines.
-    runs-on: ${{ (github.event.repository.private && vars.CI_RUNNER) || 'ubuntu-latest' }}
+      !github.event.repository.private && (
+        github.event_name == 'pull_request_target' ||
+        (github.event.issue.pull_request && (
+          github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA' ||
+          github.event.comment.body == 'recheck')))
+    # Always on GitHub's machines: a job that holds a write token and runs on pull requests from
+    # anyone never goes to the organisation's own runner.
+    runs-on: ubuntu-latest
     steps:
-      - uses: contributor-assistant/github-action@v2.6.1
+      # Pinned by commit: a tag can be moved to other code.
+      - uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
