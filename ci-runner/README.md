@@ -25,7 +25,15 @@ The server runs production, so the runners are kept apart from it:
   pair peaks at about 500 MB, and the server kept over 1.5 GB free.
 - **A clean start for every job.** `job-started.sh` removes, in the runner's
   own Docker, the containers, volumes and networks left by earlier jobs, and images and build cache older
-  than three days, as on a fresh GitHub machine.
+  than three days, as on a fresh GitHub machine. In the runner itself it removes
+  what a fresh machine wouldn't have either: the temporary folders tests leave
+  in `/tmp` (older than six hours), the runner's logs older than three days,
+  the npm cache once it passes 500 MB and the package of the last self-update.
+- **Room for production.** The runners' containers and volumes are on the
+  server's disk. With less than 8 GB free, `job-started.sh` empties the CI's
+  own Docker whatever its age, and every job's log says how much is free
+  ("Disk: N GB free"). On 12/11 the CI had taken 22 GB and left the disk with
+  0 bytes free: that is what this prevents.
 - **Private repositories only.** The organisation's default runner group
   doesn't take public repositories, and the workflows only send private ones
   here: a pull request from a fork of a public repository never runs on the
@@ -70,6 +78,18 @@ Each runner keeps its credentials in its `state` volume, so rebuilding or
 updating the containers doesn't need a new token. They update themselves when GitHub
 publishes a new version; `docker compose pull && docker compose up -d --build`
 brings the images up to date.
+
+A new `job-started.sh` reaches the running containers without rebuilding them
+(the next rebuild takes it from `/opt/gh-runner`); only while neither runs a
+job, since it removes the CI's containers:
+
+```bash
+cd /opt/gh-runner
+for c in gh-runner-runner-1 gh-runner-runner-2-1; do
+  docker cp job-started.sh "$c":/usr/local/bin/job-started.sh
+  docker exec -u root "$c" chmod 755 /usr/local/bin/job-started.sh
+done
+```
 
 To remove them: `docker compose down -v` on the server, and delete
 `hetzner-ci` and `hetzner-ci-2` under Settings → Actions → Runners.
