@@ -4,11 +4,12 @@
 #
 # A runner never touches the server's own Docker: its jobs talk to a private
 # Docker daemon (dind) of its own, with its own containers, volumes and
-# images, so CI can't see or remove anything in production, and two jobs
+# images, so a job can't touch production by accident, and two jobs
 # using the same fixed names (`app`, `app-data`) can't clash. Each pair has
 # its own network, where its daemon answers as `docker`. All containers have
 # CPU and memory caps and a low CPU weight: under load, production goes first
-# and a runaway build is what gets killed.
+# and a runaway build is what gets killed. The dind daemons are privileged, so
+# this keeps out mistakes, not a hostile job (see README.md).
 name: gh-runner
 
 x-runner: &runner
@@ -23,6 +24,7 @@ x-runner: &runner
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: /certs/client
     ACTIONS_RUNNER_HOOK_JOB_STARTED: /usr/local/bin/job-started.sh
+    ACTIONS_RUNNER_HOOK_JOB_COMPLETED: /usr/local/bin/job-completed.sh
   cpus: 1.0
   cpu_shares: 256
   mem_limit: 640m
@@ -53,7 +55,9 @@ services:
       RUNNER_NAME: hetzner-ci
     volumes:
       - state:/state
+      - home:/home/runner
       - work:/home/runner/_work
+      - tmp:/tmp
       - certs:/certs/client:ro
     networks: [ci-1]
     depends_on: [dind]
@@ -77,7 +81,9 @@ services:
       RUNNER_NAME: hetzner-ci-2
     volumes:
       - state-2:/state
+      - home-2:/home/runner
       - work-2:/home/runner/_work
+      - tmp-2:/tmp
       - certs-2:/certs/client:ro
     networks: [ci-2]
     depends_on: [dind-2]
@@ -96,12 +102,42 @@ networks:
   ci-1:
   ci-2:
 
+# Everything a job can fill lives on /srv/ci, a disk of its own with a fixed size (see
+# ci-disk.sh): the runners' home (npm cache, logs, self-updates), their workspace and /tmp,
+# and each Docker's images and build cache. When it is full, CI fails; production, on the
+# server's own disk, never notices. Only the registration (state) and dind's certificates
+# stay on the server's disk: a few kilobytes. The bind targets exist only while /srv/ci is
+# mounted, so if it isn't, the CI containers don't start rather than write to the server's disk.
+x-ci-disk: &ci-disk
+  driver: local
+  driver_opts: &ci-bind { type: none, o: bind }
+
 volumes:
   state:
-  work:
-  dind:
   certs:
   state-2:
-  work-2:
-  dind-2:
   certs-2:
+  home:
+    <<: *ci-disk
+    driver_opts: { <<: *ci-bind, device: /srv/ci/disk/home }
+  work:
+    <<: *ci-disk
+    driver_opts: { <<: *ci-bind, device: /srv/ci/disk/work }
+  tmp:
+    <<: *ci-disk
+    driver_opts: { <<: *ci-bind, device: /srv/ci/disk/tmp }
+  dind:
+    <<: *ci-disk
+    driver_opts: { <<: *ci-bind, device: /srv/ci/disk/dind }
+  home-2:
+    <<: *ci-disk
+    driver_opts: { <<: *ci-bind, device: /srv/ci/disk/home-2 }
+  work-2:
+    <<: *ci-disk
+    driver_opts: { <<: *ci-bind, device: /srv/ci/disk/work-2 }
+  tmp-2:
+    <<: *ci-disk
+    driver_opts: { <<: *ci-bind, device: /srv/ci/disk/tmp-2 }
+  dind-2:
+    <<: *ci-disk
+    driver_opts: { <<: *ci-bind, device: /srv/ci/disk/dind-2 }

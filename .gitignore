@@ -1,0 +1,9 @@
+.claude/
+CLAUDE.local.md
+.cloudflare/
+.env
+.env.*
+!.env.example
+*.log
+*.stackdump
+tmp/

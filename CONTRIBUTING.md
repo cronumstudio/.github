@@ -9,7 +9,7 @@ them as a hosted service.
 Bugs, questions and ideas are welcome as issues in the repository they are about. For a bug, say
 what you did, what you expected and what happened, and which version (`/version` of the app, or
 the release) you were on. Report security problems privately, never in an issue: see the
-repository's security policy, or write to the address on cronumstudio.com.
+[security policy](https://github.com/cronumstudio/.github/blob/main/SECURITY.md).
 
 ## Pull requests
 

@@ -7,7 +7,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /state /home/runner/_work \
  && chown runner:runner /state /home/runner/_work
-COPY --chmod=755 start.sh job-started.sh /usr/local/bin/
+COPY --chmod=755 start.sh job-started.sh job-completed.sh /usr/local/bin/
 
 USER runner
 ENTRYPOINT ["/usr/local/bin/start.sh"]
