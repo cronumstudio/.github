@@ -7,9 +7,10 @@
 # images, so a job can't touch production by accident, and two jobs
 # using the same fixed names (`app`, `app-data`) can't clash. Each pair has
 # its own network, where its daemon answers as `docker`. All containers have
-# CPU and memory caps and a low CPU weight: under load, production goes first
-# and a runaway build is what gets killed. The dind daemons are privileged, so
-# this keeps out mistakes, not a hostile job (see README.md).
+# CPU and memory caps and a low CPU weight, and all of them share one memory
+# budget (ci.slice): under load, production goes first and a runaway build is
+# what gets killed. The dind daemons are privileged, so this keeps out
+# mistakes, not a hostile job (see README.md).
 name: gh-runner
 
 x-runner: &runner
@@ -27,8 +28,13 @@ x-runner: &runner
     ACTIONS_RUNNER_HOOK_JOB_COMPLETED: /usr/local/bin/job-completed.sh
   cpus: 1.0
   cpu_shares: 256
-  mem_limit: 640m
-  memswap_limit: 768m
+  # npm ci and a test server together passed 640 MB (OOM kills on 14/11): what
+  # protects production is ci.slice, the budget all four containers share.
+  mem_limit: 1200m
+  memswap_limit: 1400m
+  cgroup_parent: ci.slice
+  # If the server itself ever runs out of memory, the kernel kills CI first.
+  oom_score_adj: 500
   logging: &logging
     driver: json-file
     options: { max-size: 10m, max-file: "3" }
@@ -45,6 +51,8 @@ x-dind: &dind
   cpu_shares: 256
   mem_limit: 1g
   memswap_limit: 1280m
+  cgroup_parent: ci.slice
+  oom_score_adj: 500
   logging: *logging
 
 services:
