@@ -1,0 +1,18 @@
+# /etc/systemd/system/ci.slice: one memory budget for all the CI containers together
+# (both runners and both Dockers, `cgroup_parent: ci.slice` in compose.yml).
+#
+# The server has 3.8 GB. Production with Dokploy, Traefik, CrowdSec and Docker itself
+# uses about 1.3 GB, so CI gets at most 1.8 GB between the four containers, whatever
+# each one's own cap: production and the page cache always keep about 2 GB.
+# Over MemoryHigh the kernel makes CI give memory back (slower, not killed); at
+# MemoryMax it kills a process inside CI, never one outside it.
+[Unit]
+Description=GitHub Actions runners and their Dockers (memory budget)
+Before=slices.target
+
+[Slice]
+MemoryAccounting=yes
+MemoryHigh=1500M
+MemoryMax=1800M
+MemorySwapMax=512M
+CPUWeight=25

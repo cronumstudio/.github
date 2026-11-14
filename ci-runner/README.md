@@ -20,10 +20,20 @@ shared machine allows:
   (`app`, `app-data`) can't clash with anything real or with the other
   runner's job. Each pair has its own network, where its daemon answers over
   TLS as `docker`: no port is published.
-- **Caps.** Each runner has 1 CPU and 640 MB, each Docker 1.5 CPU and 1 GB,
+- **Caps.** Each runner has 1 CPU and 1.2 GB, each Docker 1.5 CPU and 1 GB,
   all with a quarter of the normal CPU weight. Under load production goes
-  first, and a runaway build is what gets killed. Measured with both busy: a
-  pair peaks at about 500 MB, and the server kept over 1.5 GB free.
+  first, and a runaway build is what gets killed.
+- **One memory budget for all of CI.** The four containers live in `ci.slice`
+  (`cgroup_parent` in `compose.yml`), which together may use 1.8 GB and 512 MB of
+  swap; past 1.5 GB the kernel makes them give memory back (slower, not killed).
+  The server has 3.8 GB and production (Dokploy, the apps, Traefik, CrowdSec and
+  Docker) takes about 1.3 GB, so it always keeps about 2 GB whatever CI does. A
+  job that needs more than CI has fails on its own; nothing outside CI is killed.
+  The containers also carry `oom_score_adj: 500`, so if the server itself ever
+  ran out, the kernel would kill CI first. Before this (14/11/2026) each runner
+  had 640 MB and was killed in `npm ci` and in test servers, and the four caps
+  added up to more than the whole server. Each container's OOM count:
+  `cat /sys/fs/cgroup/ci.slice/docker-*.scope/memory.events`.
 - **A clean start for every job.** `job-started.sh` removes, in the runner's
   own Docker, the containers, volumes and networks left by earlier jobs, and images and build cache older
   than three days, as on a fresh GitHub machine. In the runner itself it removes
@@ -78,6 +88,8 @@ On the server, with these files in `/opt/gh-runner`:
 cd /opt/gh-runner
 docker compose build
 sudo bash ci-disk.sh                # the CI's own disk at /srv/ci (safe to run again)
+sudo install -m 644 ci.slice /etc/systemd/system/ && sudo systemctl daemon-reload
+sudo systemctl start ci.slice       # the CI's memory budget
 # a registration token, valid for an hour, from an organisation owner
 # (one token registers both runners):
 #   gh api -X POST orgs/cronumstudio/actions/runners/registration-token --jq .token
@@ -110,6 +122,12 @@ for c in gh-runner-runner-1 gh-runner-runner-2-1; do
   done
 done
 ```
+
+The CI's memory budget changes live, with no restart:
+`sudo systemctl set-property ci.slice MemoryMax=2G` (and the same in `ci.slice`, so
+the repository agrees). A changed `compose.yml` (caps, `cgroup_parent`) needs the
+containers recreated; `recreate-when-idle.sh` does it pair by pair, each when its
+runner has no job, so nothing running is cut (how to start it is at its top).
 
 If the runners are down or full for long, every private repository can go back to
 GitHub's machines at once (and back again with `--body hetzner`); they use the plan's
