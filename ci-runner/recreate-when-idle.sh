@@ -7,7 +7,13 @@
 #     -p WorkingDirectory=/opt/gh-runner /opt/gh-runner/recreate-when-idle.sh
 set -u
 cd /opt/gh-runner
-busy() { docker top "$1" -eo comm 2>/dev/null | grep -q Runner.Worker; }
+# A runner with a job has a Runner.Worker process. If the check itself fails, count it
+# as busy: better to wait than to cut a job.
+busy() {
+  local ps
+  ps=$(docker top "$1" 2>/dev/null) || return 0
+  grep -q Runner.Worker <<< "$ps"
+}
 for pair in "runner-2 dind-2 gh-runner-runner-2-1" "runner dind gh-runner-runner-1"; do
   set -- $pair
   for _ in $(seq 1 720); do busy "$3" || break; sleep 5; done
