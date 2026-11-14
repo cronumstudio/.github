@@ -11,7 +11,8 @@ both are busy. Nothing is assigned by hand.
 
 ## How it is isolated
 
-The server runs production, so the runners are kept apart from it:
+The server runs production, so the runners are kept apart from it, as far as a
+shared machine allows:
 
 - **Its own Docker.** Each runner's jobs talk to a Docker daemon of their own
   (`dind`, `dind-2`), not the server's. They can't see, stop or remove the
@@ -29,11 +30,21 @@ The server runs production, so the runners are kept apart from it:
   what a fresh machine wouldn't have either: the temporary folders tests leave
   in `/tmp` (older than six hours), the runner's logs older than three days,
   the npm cache once it passes 500 MB and the package of the last self-update.
-- **Room for production.** The runners' containers and volumes are on the
-  server's disk. With less than 8 GB free, `job-started.sh` empties the CI's
-  own Docker whatever its age, and every job's log says how much is free
-  ("Disk: N GB free"). On 12/11 the CI had taken 22 GB and left the disk with
-  0 bytes free: that is what this prevents.
+- **A disk of its own.** Everything a job can fill (each runner's home with its npm
+  cache, logs and self-updates, the workspace, `/tmp`, and each Docker's images and build
+  cache) is on `/srv/ci`, a 14 GB file system in a file (`/var/lib/gh-runner/ci.img`,
+  sparse: it takes only what CI uses). When it is full, CI fails and production, on the
+  server's own disk, doesn't notice: on 11 and 12/11 CI had taken 22 GB and left that disk
+  with 0 bytes. With less than 3 GB free on `/srv/ci`, `job-started.sh` empties the CI's
+  own Docker and the npm cache whatever their age, and every job's log says how much is
+  free ("CI disk: N GB free"). `ci-disk.sh` creates it.
+- **Nothing carried between jobs that could change them.** `job-completed.sh` removes the
+  actions and tools (`_work/_actions`, `_work/_tool`) each job downloaded, so a job of one
+  repository can't leave a changed action or Node for the next. What this does not do:
+  a job still controls a privileged Docker (`dind`) on the production server, and with
+  it the server. Only code from these repositories and the actions they pin by commit
+  runs here; moving the runners to a server of their own would close it, and was decided
+  against on 14/11/2026 (6/11 audit, deps-ci-1).
 - **Private repositories only.** The organisation's default runner group
   doesn't take public repositories, and the workflows only send private ones
   here: a pull request from a fork of a public repository never runs on the
@@ -51,7 +62,7 @@ gh variable set CI_RUNNER -R cronumstudio/<repo> --body hetzner   # here
 gh variable delete CI_RUNNER -R cronumstudio/<repo>               # GitHub's machines
 ```
 
-It is set on next, notes, projects, tasks, tracker and work. Only the jobs
+It is set on every private repository. Only the jobs
 that come from these shared workflows move: a repository's own jobs with
 `runs-on: ubuntu-latest` stay on GitHub until they use the same expression,
 and tracker's `macos-15` job can't run here at all.
@@ -65,11 +76,13 @@ On the server, with these files in `/opt/gh-runner`:
 
 ```bash
 cd /opt/gh-runner
+docker compose build
+sudo bash ci-disk.sh                # the CI's own disk at /srv/ci (safe to run again)
 # a registration token, valid for an hour, from an organisation owner
 # (one token registers both runners):
 #   gh api -X POST orgs/cronumstudio/actions/runners/registration-token --jq .token
 echo "RUNNER_TOKEN=<token>" > .env && chmod 600 .env
-docker compose up -d --build
+docker compose up -d
 docker compose logs -f runner runner-2   # "Listening for Jobs"
 : > .env                          # the token is no longer needed
 ```
@@ -79,17 +92,35 @@ updating the containers doesn't need a new token. They update themselves when Gi
 publishes a new version; `docker compose pull && docker compose up -d --build`
 brings the images up to date.
 
-A new `job-started.sh` reaches the running containers without rebuilding them
-(the next rebuild takes it from `/opt/gh-runner`); only while neither runs a
-job, since it removes the CI's containers:
+A runner's home is on `/srv/ci` and comes from the image only the first time, so a
+rebuilt image changes the hooks in `/usr/local/bin` but not the runner in the home (it
+updates itself). To start a runner from a new image: stop it, empty
+`/srv/ci/disk/home` (or `home-2`) and run `ci-disk.sh` again.
+
+A new `job-started.sh` or `job-completed.sh` reaches the running containers without
+rebuilding them (the next rebuild takes them from `/opt/gh-runner`); only while neither
+runs a job, since it removes the CI's containers:
 
 ```bash
 cd /opt/gh-runner
 for c in gh-runner-runner-1 gh-runner-runner-2-1; do
-  docker cp job-started.sh "$c":/usr/local/bin/job-started.sh
-  docker exec -u root "$c" chmod 755 /usr/local/bin/job-started.sh
+  for f in job-started.sh job-completed.sh; do
+    docker cp "$f" "$c:/usr/local/bin/$f"
+    docker exec -u root "$c" chmod 755 "/usr/local/bin/$f"
+  done
 done
 ```
 
-To remove them: `docker compose down -v` on the server, and delete
-`hetzner-ci` and `hetzner-ci-2` under Settings → Actions → Runners.
+If the runners are down or full for long, every private repository can go back to
+GitHub's machines at once (and back again with `--body hetzner`); they use the plan's
+minutes while there:
+
+```bash
+for r in $(gh repo list cronumstudio --visibility private --json name --jq '.[].name'); do
+  gh variable delete CI_RUNNER -R cronumstudio/$r
+done
+```
+
+To remove them: `docker compose down -v` on the server, `umount /srv/ci`, delete the
+`/srv/ci` line from `/etc/fstab` and `/var/lib/gh-runner/ci.img`, and delete `hetzner-ci`
+and `hetzner-ci-2` under Settings → Actions → Runners.

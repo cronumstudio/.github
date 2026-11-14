@@ -1,0 +1,15 @@
+# This repository's own secret scan, with the shared workflow every other repository calls
+# (6/11 audit, deps-ci-5). Public repository: it runs on GitHub's machines.
+name: Secrets
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    uses: ./.github/workflows/secret-scan.yml
