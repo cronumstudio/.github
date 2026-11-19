@@ -51,9 +51,9 @@ A good pull request:
   to the issue it comes from;
 - follows the conventions: suite-core's
   [CONVENTIONS.md](https://github.com/cronumstudio/suite-core/blob/main/CONVENTIONS.md), which
-  every repository follows, and the repository's own `CLAUDE.md`, which describes its
-  architecture, rules and tests (it is written for coding agents, and is just as useful to
-  people);
+  every repository follows, and the repository's own `CLAUDE.md` where it has one, which
+  describes its architecture, rules and tests (it is written for coding agents, and is just as
+  useful to people);
 - comes with tests for what it changes, and `npm test` passes;
 - is in English: code, comments, commit messages and documentation. Text people see in the app
   goes into the translation catalogs, never into the code;

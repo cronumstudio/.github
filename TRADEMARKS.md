@@ -28,8 +28,10 @@ them as marks.
   Work", "works with Cronum Work".
 - **Refer to Cronum Studio and its products by name** in articles, reviews, tutorials, talks
   and comparisons, as long as it's clear you aren't Cronum Studio.
-- **Keep the credits**: the "by Cronum Studio" signature, and the copyright and licence notices,
-  which the AGPL asks you to keep anyway.
+- **Keep the credits**: the copyright and licence notices, which the AGPL asks you to keep
+  anyway, and, in an unmodified copy, the "by Cronum Studio" signature. A modified version
+  credits Cronum Studio in words instead ("based on Cronum Work by Cronum Studio"), without the
+  ring mark.
 
 ## What needs another name
 
