@@ -6,11 +6,21 @@
 # Most apps have nothing to install (no dependencies, and SQLite comes inside
 # Node); a repository with a package-lock.json gets `npm ci` first.
 #
+# On a pull request, a second job (commit-emails) fails when the author or
+# committer email of any commit the pull request adds, merge commits included,
+# matches the `forbidden-emails` regular expression. A commit pushed to a
+# public repository can't be taken back, so an address that must never be
+# published (by default, the maintainer's personal domain) is stopped before
+# the merge. Other contributors' addresses don't match it.
+#
 # Usage, from the calling repository:
 #
 #   jobs:
 #     test:
 #       uses: cronumstudio/.github/.github/workflows/test.yml@main
+#
+# The checks it reports are `test / test` and, on pull requests,
+# `test / commit-emails`.
 name: Test
 
 on:
@@ -20,6 +30,13 @@ on:
         description: Node.js version to test with.
         type: string
         default: '24'
+      forbidden-emails:
+        description: >-
+          Perl-compatible regular expression (as `grep -P` reads it, in the C
+          locale). A pull request fails when the author or committer email of
+          one of its commits matches it. An empty string turns the check off.
+        type: string
+        default: '(?i)@ideaalab\.com$'
 
 permissions:
   contents: read
@@ -58,3 +75,64 @@ jobs:
       - name: Check catalog parity
         if: steps.i18n.outputs.present == 'true'
         run: npm run i18n
+
+  commit-emails:
+    if: github.event_name == 'pull_request' && inputs.forbidden-emails != ''
+    # Same runner choice as the test job above.
+    runs-on: ${{ (github.event.repository.private && vars.CI_RUNNER) || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # no token left in .git/config for later steps
+          # Every commit of every branch, but no trees or blobs: the whole
+          # graph for any range, merge commits included, at a fraction of a
+          # full clone.
+          fetch-depth: 0
+          filter: tree:0
+      - name: Check author and committer emails
+        shell: bash
+        env:
+          FORBIDDEN: ${{ inputs.forbidden-emails }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LC_ALL: C   # grep -P needs a unibyte or UTF-8 locale; C is always there
+        run: |
+          # GitHub tests a pull request on a merge of its head into the tip of
+          # the base branch, and that merge is what is checked out: its first
+          # parent is the base, its second the head. Between them lies every
+          # commit the pull request adds. The base SHA of the event is only the
+          # fallback: it can lag behind the branch.
+          head=$(git rev-parse --verify "${HEAD_SHA}^{commit}")
+          if [ "$(git rev-parse -q --verify 'HEAD^2^{commit}' || true)" = "$head" ]; then
+            base=$(git rev-parse --verify 'HEAD^1^{commit}')
+          else
+            base=$(git rev-parse --verify "${BASE_SHA}^{commit}")
+          fi
+
+          status=0
+          grep -qP -- "$FORBIDDEN" < /dev/null || status=$?
+          if [ "$status" -gt 1 ]; then
+            echo "::error::forbidden-emails is not a valid Perl-compatible regular expression."
+            exit 1
+          fi
+
+          # Raw addresses (%ae, %ce), never the .mailmap ones: a .mailmap in
+          # the branch must not be able to hide an address.
+          lines=$(git log --no-use-mailmap --format='%H author %ae%n%H committer %ce' "${base}..${head}")
+          commits=$(git rev-list --count "${base}..${head}")
+          found=0
+          while read -r sha role email; do
+            [ -n "$sha" ] || continue
+            if grep -qP -- "$FORBIDDEN" <<< "$email"; then
+              # The address itself stays out of the log: it is what must not spread.
+              echo "::error::Commit ${sha:0:12} has a forbidden ${role} email."
+              found=$((found + 1))
+            fi
+          done <<< "$lines"
+
+          if [ "$found" -gt 0 ]; then
+            echo "::error::${found} author or committer email(s) in this pull request match forbidden-emails. Rewrite those commits with another address (git commit --amend --reset-author, or a rebase with --exec) and force-push the branch."
+            exit 1
+          fi
+          echo "Checked ${commits} commit(s) in ${base:0:12}..${head:0:12}: no forbidden email."

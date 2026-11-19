@@ -1,4 +1,4 @@
-# Keeps the actions the shared workflows pin by commit up to date (6/11 audit, deps-ci-3):
+# Keeps the actions the shared workflows pin by commit up to date:
 # a pin by SHA can't be moved by whoever controls the action's tags, and this proposes
 # each new release as a pull request.
 version: 2
