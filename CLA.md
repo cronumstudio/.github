@@ -5,8 +5,10 @@ Version 1.0, 29 October 2026
 Thank you for contributing to a Cronum Studio project. This agreement says what you allow Cronum
 Studio to do with what you contribute, so that the projects can stay open source while Cronum
 Studio also offers them as a hosted service. You keep the copyright of your contributions. You
-sign it once, by commenting on your first pull request as the bot asks, and it covers every
-later contribution to any repository of the cronumstudio organization on GitHub.
+sign it by commenting on a pull request as the bot asks. The bot asks once per repository, on
+your first pull request in each repository of the cronumstudio organization on GitHub; it is
+the same agreement every time, and it covers every later contribution to any repository of the
+organization.
 
 "Cronum Studio" means Martin Andersen, trading as Cronum Studio, and anyone who succeeds him as
 owner of the Cronum Studio projects, such as a company he transfers them to.

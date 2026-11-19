@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/cronumstudio/.github/blob/main/SECURITY.md
+    about: Report it privately, never in a public issue. The security policy says how.
+  - name: Help with an account on the hosted service
+    url: https://github.com/cronumstudio/.github/blob/main/SUPPORT.md
+    about: Sign-in, plans, payments or your data on work.cronumstudio.com go by email, never in a public issue.

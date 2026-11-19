@@ -1,0 +1,81 @@
+name: Bug report
+description: Something in Cronum Work, one of its modules or suite-core doesn't work as it should.
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please search the existing issues first.
+
+        - **A security problem?** Don't report it here: follow the [security policy](https://github.com/cronumstudio/.github/blob/main/SECURITY.md).
+        - **A problem with your account on the hosted service** (sign-in, plan, payments, your data)? Email us instead: see [support](https://github.com/cronumstudio/.github/blob/main/SUPPORT.md).
+
+        Everything here is public: leave out email addresses, tokens, domains and anything personal.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      options:
+        - On the hosted service (work.cronumstudio.com)
+        - On a copy I run myself
+        - In a development checkout
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What the app's `/version` page shows, or the commit you run.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options:
+        - Tasks
+        - Projects
+        - Next
+        - Notes
+        - Sign-in, accounts or settings
+        - Sharing
+        - AI assistant connection (MCP)
+        - Installing or running it
+        - Something else, or not sure
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Error messages, and screenshots if they help (without personal data).
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser and operating system or device. For a copy you run yourself, also how you run it (Docker or Node, which proxy).
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant server or browser console lines, with secrets, domains and email addresses removed.
+      render: text

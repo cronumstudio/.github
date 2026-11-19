@@ -1,0 +1,20 @@
+name: Question
+description: Something about installing, configuring or using Cronum Work that isn't a bug.
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search the existing issues first. For your account on the hosted service, email us instead: see [support](https://github.com/cronumstudio/.github/blob/main/SUPPORT.md). Everything here is public: leave out email addresses, tokens, domains and anything personal.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: The version you run (the app's `/version` page), how you run it (Docker or Node, which proxy), and what you've tried.
