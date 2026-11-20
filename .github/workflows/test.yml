@@ -27,8 +27,9 @@ permissions:
 jobs:
   test:
     # Private repositories run on the organisation's own runner when the
-    # CI_RUNNER variable names its label (see ci-runner/); public ones, and
-    # everything once the variable is removed, on GitHub's machines.
+    # CI_RUNNER variable names its label (the runner's configuration is kept
+    # private); public ones, and everything once the variable is removed,
+    # on GitHub's machines.
     runs-on: ${{ (github.event.repository.private && vars.CI_RUNNER) || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
