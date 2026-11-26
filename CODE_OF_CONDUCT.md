@@ -56,15 +56,32 @@ Examples of representing our community include using an official e-mail address,
 posting via an official social media account, or acting as an appointed
 representative at an online or offline event.
 
+Our community spaces are the repositories, issues, pull requests, discussions and
+other spaces of the cronumstudio organization on GitHub, and any other place where
+Cronum Studio hosts a conversation. On GitHub, GitHub's own rules apply too. The
+hosted service at work.cronumstudio.com has its own rules, in its terms of service.
+
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement at
-hello@cronumstudio.com.
+hello@cronumstudio.com, with "Conduct" in the subject. Today Cronum Studio is
+maintained by one person, who handles every report; if yours is about that
+person, you can also report it to GitHub.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
+
+Only the people who handle a report read it, and we don't tell the person it is
+about who made it, unless you agree or the law requires it. We keep a report, and
+what we decided, only as long as we need them to deal with the matter and to apply
+the decision. We pass information on only when the law requires it, for example to
+a court, or when someone's safety is at risk. If what happened may be a crime, or
+someone is in danger, contact the police: we can act in our community spaces, but
+we don't investigate crimes. Send us only what we need to understand what
+happened. The [privacy policy](https://cronumstudio.com/privacy/#github) explains
+your rights over your data.
 
 ## Enforcement Guidelines
 
@@ -112,6 +129,9 @@ individual, or aggression toward or disparagement of classes of individuals.
 **Consequence**: A permanent ban from any sort of public interaction within the
 community.
 
+These consequences apply to our community spaces. On their own, they don't close
+an account on the hosted service: only its terms of service can.
+
 ## Attribution
 
 This Code of Conduct is adapted from the [Contributor Covenant][homepage],
@@ -120,6 +140,10 @@ version 2.1, available at
 
 Community Impact Guidelines were inspired by
 [Mozilla's code of conduct enforcement ladder][Mozilla CoC].
+
+The Contributor Covenant is licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Cronum Studio adapted
+its Scope, Enforcement and Enforcement Guidelines sections.
 
 For answers to common questions about this code of conduct, see the FAQ at
 [https://www.contributor-covenant.org/faq][FAQ]. Translations are available at

@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Ideas are welcome. Please search the existing issues first. If you'd like to build it yourself, wait for an answer here before you start: see [CONTRIBUTING.md](https://github.com/cronumstudio/.github/blob/main/CONTRIBUTING.md).
+        Ideas are welcome. Please search the existing issues first. If you'd like to build it yourself, wait for an answer here before you start: see [CONTRIBUTING.md](https://github.com/cronumstudio/.github/blob/main/CONTRIBUTING.md). Everything here is public, so leave out anything personal; and anyone, Cronum Studio included, may use the ideas posted here.
   - type: textarea
     id: problem
     attributes:
