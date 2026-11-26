@@ -1,0 +1,25 @@
+# Contributor License Agreement for this repository too: its documents (the CLA itself,
+# CONTRIBUTING, SECURITY, the trademark policy) have no license file, so an outside pull request
+# would come with no license at all. It calls this repository's own shared workflow, from the base
+# branch (pull_request_target never runs the pull request's code). The signatures stay here, on the
+# branch cla-signatures. Its name isn't "CLA": after a signature the action runs the check again by
+# finding the workflow with the caller's name, and the shared workflow, which is also here, has
+# that one.
+name: CLA check
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, closed]
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  cla:
+    permissions:
+      contents: write        # writes the signatures
+      pull-requests: write   # comments on the pull request, locks it once closed
+      actions: write         # runs the check again after a signature
+      statuses: write
+    uses: ./.github/workflows/cla.yml

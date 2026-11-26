@@ -1,8 +1,16 @@
-# Reusable Contributor License Agreement check: a pull request can only be merged once its
-# authors have signed CLA.md (in this repository), by commenting on it as the bot asks. The
-# signatures are kept in the calling repository, in signatures/cla.json on the branch
-# `cla-signatures`, which must exist; nothing outside GitHub is involved. Cronum Studio's own
+# Reusable Contributor License Agreement check: a pull request can only be merged once the
+# authors of its commits have signed the current version of CLA.md (in this repository), by
+# commenting on it as the bot asks. Each version of the CLA is kept unchanged in cla/, and the bot
+# links to that copy. The signatures are kept in the calling repository, in
+# signatures/cla-<version>.json on the branch `cla-signatures`, which must exist; nothing outside
+# GitHub is involved. A new version has a new file, so everyone signs it again. Cronum Studio's own
 # accounts and bots don't sign.
+#
+# A new version of the CLA changes, in one commit here: the link (cla/CLA-<version>.md), the sign
+# phrase (in `if:` below, in custom-pr-sign-comment and in CONTRIBUTING.md), the signature file and
+# the version in the two comments. Before a calling repository moves its pin to that commit, its
+# `cla-signatures` branch gets the new file, holding {"signedContributors": []}: the action reads
+# that file on every run and doesn't create it, so without it every pull request would fail.
 #
 # Only public repositories call it: in a private one only collaborators open pull requests, and
 # they are all on the allowlist. Usage, from the calling repository (.github/workflows/cla.yml),
@@ -11,7 +19,7 @@
 #
 #   on:
 #     pull_request_target:
-#       types: [opened, synchronize, reopened]
+#       types: [opened, synchronize, reopened, closed]   # closed: locks the conversation
 #     issue_comment:
 #       types: [created]
 #   permissions: {}
@@ -19,7 +27,7 @@
 #     cla:
 #       permissions:
 #         contents: write        # writes the signatures
-#         pull-requests: write   # comments on the pull request
+#         pull-requests: write   # comments on the pull request, locks it once closed
 #         actions: write         # runs the check again after a signature
 #         statuses: write
 #       uses: cronumstudio/.github/.github/workflows/cla.yml@<commit sha>  # main of <date>
@@ -37,19 +45,77 @@ jobs:
       !github.event.repository.private && (
         github.event_name == 'pull_request_target' ||
         (github.event.issue.pull_request && (
-          github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA' ||
+          github.event.comment.body == 'I have read the Cronum Studio CLA version 1.1 and I hereby sign it' ||
           github.event.comment.body == 'recheck')))
     # Always on GitHub's machines: a job that holds a write token and runs on pull requests from
     # anyone never goes to the organisation's own runner.
     runs-on: ubuntu-latest
+    env:
+      # Cronum Studio's own accounts and bots: they don't sign.
+      EXEMPT: martinandersen84,dependabot[bot],github-actions[bot],claude[bot],cronum-studio[bot]
     steps:
+      # A commit names whatever author and committer it was made with, so in a pull request from a
+      # fork a commit attributed to an account in EXEMPT would pass without anyone signing: that
+      # fails here. It reads the commits through the API and checks nothing out.
+      - name: No commit from a fork in the name of an account that doesn't sign
+        if: >-
+          github.event_name == 'pull_request_target' && github.event.action != 'closed' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          shopt -s nocasematch
+          # A commit that isn't linked to any account counts under its git author name, as the
+          # action does, so a made-up name such as "dependabot[bot]" is caught too.
+          logins=$(gh api --paginate "repos/$REPO/pulls/$PR/commits" \
+            --jq '.[] | (.author.login // empty), (.committer.login // empty), (.commit.author.name // empty)' | sort -u)
+          IFS=, read -ra exempt <<< "$EXEMPT"
+          while IFS= read -r login; do
+            for account in "${exempt[@]}"; do
+              if [[ "$login" == "$account" ]]; then
+                echo "::error::A commit of this pull request is attributed to $login, which doesn't sign the CLA. Make every commit with your own account."
+                exit 1
+              fi
+            done
+          done <<< "$logins"
       # Pinned by commit: a tag can be moved to other code.
       - uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path-to-document: https://github.com/cronumstudio/.github/blob/main/CLA.md
-          path-to-signatures: signatures/cla.json
+          path-to-document: https://github.com/cronumstudio/.github/blob/main/cla/CLA-1.1.md
+          path-to-signatures: signatures/cla-1.1.json
           branch: cla-signatures
-          allowlist: martinandersen84,dependabot[bot],github-actions[bot],claude[bot],cronum-studio[bot]
-          lock-pullrequest-aftermerge: false
+          allowlist: ${{ env.EXEMPT }}
+          # The phrase must be the same as in `if:` above and in CONTRIBUTING.md. The commit that
+          # records a signature keeps the action's default message, which names the pull request
+          # (a custom one can't in v2.6.1: $pullRequestNo isn't replaced).
+          custom-pr-sign-comment: I have read the Cronum Studio CLA version 1.1 and I hereby sign it
+          # The request to sign is when the signer's data is collected, so it says who keeps what,
+          # where and why, and the right to object to the record being public, on a line of its
+          # own. The action adds the sign phrase below it.
+          custom-notsigned-prcomment: |
+            Thank you for your pull request. Before it can be merged, $you need to sign the [Cronum Studio Contributor License Agreement, version 1.1](https://github.com/cronumstudio/.github/blob/main/cla/CLA-1.1.md). It is in English: please read it first.
+
+            In short: you keep the copyright of your contribution, and you give Cronum Studio a free license, which you can't withdraw, to use it, change it and license it to others, in its open source projects and also under closed licenses, for example in its hosted service.
+
+            If you contribute as part of your job, or you are not yet of legal age (18 in most countries), don't sign yet: write to hello@cronumstudio.com first.
+
+            Cronum Studio (Martin Andersen) keeps a record of your signature to show what you agreed to: your GitHub username and user ID, the date, and the numbers of your comment, of this pull request and of this repository, in this repository's `cla-signatures` branch, where anyone can see it. Our [privacy policy](https://cronumstudio.com/privacy/#github) explains how we handle it and your rights.
+
+            You can object to that record being public: our privacy policy says how.
+
+            To sign, post a comment on this pull request with exactly the text below and nothing else. The bot asks once in each repository; it is the same agreement everywhere. If you sign by mistake, say so here before the pull request is merged.
+          # Once everyone who has to sign has signed, the action replaces its comment with this one:
+          # Cronum Studio's confirmation of the signatures, with the version and its link.
+          custom-allsigned-prcomment: >-
+            Cronum Studio (Martin Andersen) confirms that it has received the signatures of everyone in
+            this pull request who has to sign the
+            [Cronum Studio Contributor License Agreement, version 1.1](https://github.com/cronumstudio/.github/blob/main/cla/CLA-1.1.md).
+            Thank you! The signatures are kept in this repository's `cla-signatures` branch.
+          # Locks the conversation once the pull request is closed, so that the signature comments
+          # stay as they were. It needs `closed` among the caller's pull_request_target types.
+          lock-pullrequest-aftermerge: true
